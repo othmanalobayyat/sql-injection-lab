@@ -1,0 +1,61 @@
+# ============================================================
+# SQL Injection Lab - Level 1
+# ============================================================
+# Two services:
+#   web : PHP 8.2 + Apache  -> http://localhost:8080
+#   db  : MySQL 8.0         -> initialised from setup.sql
+#
+# WARNING: this lab is INTENTIONALLY VULNERABLE.
+# Ports are bound to 127.0.0.1 so it is only reachable from
+# your own machine, not from other computers on your network.
+# ============================================================
+
+services:
+  web:
+    # The official php:8.2-apache image ships without the mysqli
+    # extension, so we build a tiny image that adds it (see Dockerfile).
+    build: .
+    container_name: sqli_web
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      # Live-mount the web root: edit files in ./www and refresh
+      # the browser - no rebuild needed.
+      - ./www:/var/www/html
+    environment:
+      DB_HOST: db
+      DB_NAME: sqli_lab
+      DB_USER: lab_user
+      DB_PASS: lab_pass
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    container_name: sqli_db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      # Creating the database here also grants lab_user full
+      # privileges on it.
+      MYSQL_DATABASE: sqli_lab
+      MYSQL_USER: lab_user
+      MYSQL_PASSWORD: lab_pass
+    volumes:
+      # Any .sql file in this folder runs automatically, but ONLY
+      # the first time the container starts with an empty data volume.
+      - ./setup.sql:/docker-entrypoint-initdb.d/setup.sql:ro
+      # Persistent database storage (delete it to reset the lab).
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    # No ports published: the database is only reachable from the
+    # web container. Use `docker compose exec db mysql ...` to inspect it.
+
+volumes:
+  db_data:
